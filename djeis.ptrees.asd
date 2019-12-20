@@ -7,5 +7,4 @@
   :version "0.0.1"
   :serial t
   :depends-on (#:alexandria #:serapeum #:bordeaux-threads)
-  :components ((:file "package")
-               (:file "djeis.ptrees")))
+  :components ((:file "djeis.ptrees.bst")))

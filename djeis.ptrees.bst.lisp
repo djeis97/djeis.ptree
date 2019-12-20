@@ -1,12 +1,17 @@
-;;;; djeis.ptrees.lisp
 
-(in-package #:djeis.ptrees)
+
+(defpackage #:djeis.ptrees.bst
+  (:use #:cl)
+  (:local-nicknames (#:a #:alexandria) (#:s #:serapeum))
+  (:export #:lookup #:insert! #:delete! #:make-wb-tree
+           #:transient-for #:persistent!))
+
+(in-package #:djeis.ptrees.bst)
 
 (defstruct box val)
 
 (defstruct base-tree
   root
-  key
   cmp)
 
 (defstruct (ptree (:include base-tree))
@@ -19,6 +24,7 @@
 
 (defstruct node
   transient-box
+  key
   value
   left
   right)
@@ -29,38 +35,37 @@
   (funcall (ttree-persistent! tree) tree))
 
 (defun lookup (tree key)
-  (let ((keyfn (base-tree-key tree))
-        (cmpfn (base-tree-cmp tree)))
+  (let ((cmpfn (base-tree-cmp tree)))
     (labels ((recursor (node)
-               (when node
-                 (let ((nkey (funcall keyfn (node-value node))))
-                   (cond
-                     ((funcall cmpfn key nkey)
-                      (recursor (node-left node)))
-                     ((funcall cmpfn nkey key)
-                      (recursor (node-right node)))
-                     (t (node-value node)))))))
+               (if node
+                   (let ((nkey (node-key node)))
+                     (cond
+                       ((funcall cmpfn key nkey)
+                        (recursor (node-left node)))
+                       ((funcall cmpfn nkey key)
+                        (recursor (node-right node)))
+                       (t (values (node-value node) t))))
+                   (values nil nil))))
       (recursor (base-tree-root tree)))))
 
 (defun %split! (tree node key)
-  (let* ((key-fn (base-tree-key tree))
-         (joiner (ttree-joiner tree))
+  (let* ((joiner (ttree-joiner tree))
          (cmp (base-tree-cmp tree)))
     (when (null node)
       (return-from %split!
         (values nil nil nil)))
-    (let* ((node-true-key (funcall key-fn (node-value node))))
+    (let* ((node-true-key (node-key node)))
       (cond
         ((funcall cmp key node-true-key)
          (multiple-value-bind (l returned-node r)
              (%split! tree (node-left node) key)
            (values l returned-node (funcall joiner tree
-                                            r (node-value node) (node-right node)
+                                            r (node-key node) (node-value node) (node-right node)
                                             node))))
         ((funcall cmp node-true-key key)
          (multiple-value-bind (l returned-node r)
              (%split! tree (node-right node) key)
-           (values (funcall joiner tree (node-left node) (node-value node) l node)
+           (values (funcall joiner tree (node-left node) (node-key node) (node-value node) l node)
                    returned-node
                    r)))
         (t (values (node-left node) node (node-right node)))))))
@@ -70,7 +75,7 @@
       (multiple-value-bind (split-tree split-node)
           (%split-last! tree (node-right node))
         (values (funcall (ttree-joiner tree) tree
-                         (node-left node) (node-value node) split-tree
+                         (node-left node) (node-key node) (node-value node) split-tree
                          node)
                 split-node))
       (values (node-left node) node)))
@@ -80,51 +85,48 @@
       (multiple-value-bind (split-left split-node)
           (%split-last! tree left)
         (funcall (ttree-joiner tree) tree
-                 split-left (node-value split-node) right
+                 split-left (node-key split-node) (node-value split-node) right
                  split-node))
       right))
 
-(defun insert! (tree value)
+(defun insert! (tree key value)
   (check-type tree ttree)
   (assert (eq (bt:current-thread) (box-val (ttree-transient-box tree))))
-  (let* ((key (base-tree-key tree))
-         (cmp (base-tree-cmp tree))
-         (joiner (ttree-joiner tree))
-         (value-key (funcall key value)))
-    (labels ((recursor (node)
-               (if node
-                   (let ((node-key (funcall key (node-value node))))
-                     (cond
-                       ((funcall cmp value-key node-key)
-                        (funcall joiner tree
-                                 (recursor (node-left node)) (node-value node) (node-right node)
-                                 node))
-                       ((funcall cmp node-key value-key)
-                        (funcall joiner tree
-                                 (node-left node) (node-value node) (recursor (node-right node))
-                                 node))
-                       (t (funcall joiner tree (node-left node) value (node-right node) node))))
-                   (funcall joiner tree nil value nil))))
-      (s:callf #'recursor (base-tree-root tree))
-      tree)))
-
-(defun delete! (tree value-key)
-  (check-type tree ttree)
-  (assert (eq (bt:current-thread) (box-val (ttree-transient-box tree))))
-  (let* ((key (base-tree-key tree))
-         (cmp (base-tree-cmp tree))
+  (let* ((cmp (base-tree-cmp tree))
          (joiner (ttree-joiner tree)))
     (labels ((recursor (node)
                (if node
-                   (let ((node-key (funcall key (node-value node))))
+                   (let ((node-key (node-key node)))
                      (cond
-                       ((funcall cmp value-key node-key)
+                       ((funcall cmp key node-key)
                         (funcall joiner tree
-                                 (recursor (node-left node)) (node-value node) (node-right node)
+                                 (recursor (node-left node)) (node-key node) (node-value node) (node-right node)
                                  node))
-                       ((funcall cmp node-key value-key)
+                       ((funcall cmp node-key key)
                         (funcall joiner tree
-                                 (node-left node) (node-value node) (recursor (node-right node))
+                                 (node-left node) (node-key node) (node-value node) (recursor (node-right node))
+                                 node))
+                       (t (funcall joiner tree (node-left node) key value (node-right node) node))))
+                   (funcall joiner tree nil key value nil))))
+      (s:callf #'recursor (base-tree-root tree))
+      tree)))
+
+(defun delete! (tree key)
+  (check-type tree ttree)
+  (assert (eq (bt:current-thread) (box-val (ttree-transient-box tree))))
+  (let* ((cmp (base-tree-cmp tree))
+         (joiner (ttree-joiner tree)))
+    (labels ((recursor (node)
+               (if node
+                   (let ((node-key (node-key node)))
+                     (cond
+                       ((funcall cmp key node-key)
+                        (funcall joiner tree
+                                 (recursor (node-left node)) (node-key node) (node-value node) (node-right node)
+                                 node))
+                       ((funcall cmp node-key key)
+                        (funcall joiner tree
+                                 (node-left node) (node-key node) (node-value node) (recursor (node-right node))
                                  node))
                        (t (%join2! tree (node-left node) (node-right node)))))
                    nil)))
@@ -132,38 +134,35 @@
       tree)))
 
 
-(defun ub-join (tree left value right &optional old-node)
+(defun ub-join (tree left key value right &optional old-node)
   (let ((box (ttree-transient-box tree)))
     (unless (and old-node (eql (node-transient-box old-node) box))
       (setf old-node (make-node :transient-box box))))
   (setf (node-left old-node) left
+        (node-key old-node) key
         (node-right old-node) right
         (node-value old-node) value)
   old-node)
 
-(defun make-ub-tree (&optional (cmp #'<) (key #'identity))
+(defun make-ub-tree (&optional (cmp #'<))
   (labels ((transient-for (tree)
              (make-ttree :transient-box (make-box :val (bt:current-thread))
                          :root (base-tree-root tree)
-                         :key (base-tree-key tree)
                          :cmp (base-tree-cmp tree)
                          :persistent! #'persistent!
                          :joiner #'ub-join))
            (persistent! (tree)
              (setf (box-val (ttree-transient-box tree)) nil)
              (make-ptree :root (base-tree-root tree)
-                         :key (base-tree-key tree)
                          :cmp (base-tree-cmp tree)
                          :transient-for #'transient-for)))
-    (make-ptree :key key
-                :cmp cmp
-                :transient-for #'transient-for)))
+    (make-ptree :cmp cmp :transient-for #'transient-for)))
 
 
 (defstruct (wbnode (:include node))
   size)
 
-(defun wb-join (tree left value right &optional old-node)
+(defun wb-join (tree left key value right &optional old-node)
   (let ((box (ttree-transient-box tree)))
     (labels ((get-node (node)
                (cond ((null node) (make-wbnode :transient-box box))
@@ -197,6 +196,7 @@
                              (wbnode-size old-node) (+ 1
                                                        (size left)
                                                        (size right))
+                             (node-key old-node) key
                              (node-value old-node) value)
                        old-node)
                      (let ((rec (join-right (node-right left) right)))
@@ -231,6 +231,7 @@
                              (wbnode-size old-node) (+ 1
                                                        (size left)
                                                        (size right))
+                             (node-key old-node) key
                              (node-value old-node) value)
                        old-node)
                      (let ((rec (join-left left (node-left right))))
@@ -264,24 +265,21 @@
                        (wbnode-size old-node) (+ 1
                                                  (size left)
                                                  (size right))
+                       (node-key old-node) key
                        (node-value old-node) value)
                  old-node))))))
 
 
-(defun make-wb-tree (&key (cmp #'<) (key #'identity))
+(defun make-wb-tree (&key (cmp #'<))
   (labels ((transient-for (tree)
              (make-ttree :transient-box (make-box :val (bt:current-thread))
                          :root (base-tree-root tree)
-                         :key (base-tree-key tree)
                          :cmp (base-tree-cmp tree)
                          :persistent! #'persistent!
                          :joiner #'wb-join))
            (persistent! (tree)
              (setf (box-val (ttree-transient-box tree)) nil)
              (make-ptree :root (base-tree-root tree)
-                         :key (base-tree-key tree)
                          :cmp (base-tree-cmp tree)
                          :transient-for #'transient-for)))
-    (make-ptree :key key
-                :cmp cmp
-                :transient-for #'transient-for)))
+    (make-ptree :cmp cmp :transient-for #'transient-for)))
