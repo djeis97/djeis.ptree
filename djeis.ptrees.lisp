@@ -164,7 +164,6 @@
   size)
 
 (defun wb-join (tree left value right &optional old-node)
-  (declare (optimize debug))
   (let ((box (ttree-transient-box tree)))
     (labels ((get-node (node)
                (cond ((null node) (make-wbnode :transient-box box))
