@@ -2,13 +2,14 @@
 
 (defpackage #:djeis.ptrees.bst
   (:use #:cl)
+  (:import-from #:djeis.ptrees.common
+                #:make-box #:box-val)
   (:local-nicknames (#:a #:alexandria) (#:s #:serapeum))
   (:export #:lookup #:insert! #:delete! #:make-wb-tree
            #:transient-for #:persistent!))
 
 (in-package #:djeis.ptrees.bst)
 
-(defstruct box val)
 
 (defstruct base-tree
   root
