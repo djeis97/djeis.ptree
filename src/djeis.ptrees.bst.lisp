@@ -28,11 +28,15 @@
   right)
 
 (defun transient-for (tree)
+  (check-type tree ptree)
   (funcall (ptree-transient-for tree) tree))
 (defun persistent! (tree)
+  (check-type tree ttree)
+  (assert (eq (bt:current-thread) (box-val (ttree-transient-box tree))))
   (funcall (ttree-persistent! tree) tree))
 
 (defun lookup (tree key)
+  (check-type tree base-tree)
   (let ((cmpfn (base-tree-cmp tree)))
     (labels ((recursor (node)
                (if node
@@ -116,27 +120,29 @@
 (defun delete! (tree key)
   (check-type tree ttree)
   (assert (eq (bt:current-thread) (box-val (ttree-transient-box tree))))
-  (let* ((cmp (base-tree-cmp tree))
-         (joiner (ttree-joiner tree)))
-    ;; (labels ((recursor (node)
-    ;;            (if node
-    ;;                (let ((node-key (node-key node)))
-    ;;                  (cond
-    ;;                    ((funcall cmp key node-key)
-    ;;                     (funcall joiner tree
-    ;;                              (recursor (node-left node)) (node-key node) (node-value node) (node-right node)
-    ;;                              node))
-    ;;                    ((funcall cmp node-key key)
-    ;;                     (funcall joiner tree
-    ;;                              (node-left node) (node-key node) (node-value node) (recursor (node-right node))
-    ;;                              node))
-    ;;                    (t (%join2! tree (node-left node) (node-right node)))))
-    ;;                nil)))
-    ;;   (s:callf #'recursor (base-tree-root tree))
-    ;;   tree)
-    (multiple-value-bind (left node right)
-        (%split! tree (base-tree-root tree) key)
-      (%join2! tree left right))))
+  ;; (let* ((cmp (base-tree-cmp tree))
+  ;;        (joiner (ttree-joiner tree)))
+  ;;   (labels ((recursor (node)
+  ;;              (if node
+  ;;                  (let ((node-key (node-key node)))
+  ;;                    (cond
+  ;;                      ((funcall cmp key node-key)
+  ;;                       (funcall joiner tree
+  ;;                                (recursor (node-left node)) (node-key node) (node-value node) (node-right node)
+  ;;                                node))
+  ;;                      ((funcall cmp node-key key)
+  ;;                       (funcall joiner tree
+  ;;                                (node-left node) (node-key node) (node-value node) (recursor (node-right node))
+  ;;                                node))
+  ;;                      (t (%join2! tree (node-left node) (node-right node)))))
+  ;;                  nil)))
+  ;;     (s:callf #'recursor (base-tree-root tree))
+  ;;     tree))
+  (multiple-value-bind (left node right)
+      (%split! tree (base-tree-root tree) key)
+    (declare (ignore node))
+    (setf (base-tree-root tree) (%join2! tree left right))
+    tree))
 
 
 (defun ub-join (tree left key value right &optional old-node)
