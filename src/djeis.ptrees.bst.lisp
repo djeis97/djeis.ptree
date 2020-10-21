@@ -1,12 +1,10 @@
-(defpackage #:djeis.ptrees.bst
-  (:use #:cl)
+(defpackage #:djeis.ptrees.bst.impl
+  (:use #:cl #:djeis.ptrees.bst)
   (:import-from #:djeis.ptrees.common
                 #:make-box #:box-val)
-  (:local-nicknames (#:a #:alexandria) (#:s #:serapeum))
-  (:export #:lookup #:insert! #:delete! #:make-wb-tree
-           #:transient-for #:persistent!))
+  (:local-nicknames (#:a #:alexandria) (#:s #:serapeum)))
 
-(in-package #:djeis.ptrees.bst)
+(in-package #:djeis.ptrees.bst.impl)
 
 (defstruct base-tree
   root
@@ -144,6 +142,29 @@
     (setf (base-tree-root tree) (%join2! tree left right))
     tree))
 
+(defun merge! (tree1 tree2)
+  "Merge the k/v pairs of the persistent tree2 into the transient tree1.
+
+   Warining: Assumes that tree1's key and cmp are valid for the keys of tree2 and that tree2 is
+   already in the order that would have been applied by tree1's key and cmp."
+  (check-type tree1 ttree)
+  (check-type tree2 ptree)
+  (let ((joiner (ttree-joiner tree1)))
+    (setf (base-tree-root tree1)
+          (labels ((merge-trees (t1 t2)
+                     (cond
+                       ((null t1) t2)
+                       ((null t2) t1)
+                       (t (multiple-value-bind (left node right)
+                              (%split! tree1 t2 (node-key t1))
+                            (funcall joiner tree1
+                                     (merge-trees (node-left t1) left)
+                                     (node-key t1)
+                                     (merge-trees (node-right r1) right)
+                                     t1))))))
+            (merge-trees (base-tree-root tree1)
+                         (base-tree-root tree2))))
+    tree1))
 
 (defun ub-join (tree left key value right &optional old-node)
   (let ((box (ttree-transient-box tree)))

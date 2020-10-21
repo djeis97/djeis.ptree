@@ -1,17 +1,14 @@
 
-(defpackage #:djeis.ptrees.hamt
-  (:use #:cl)
+(defpackage #:djeis.ptrees.hamt.impl
+  (:use #:cl #:djeis.ptrees.hamt)
   (:import-from #:djeis.ptrees.common
                 #:make-box #:box-val)
-  (:local-nicknames (#:a #:alexandria) (#:s #:serapeum))
-  (:export #:make-ptrie #:insert! #:delete!
-           #:transient-for #:persistent!
-           #:lookup))
+  (:local-nicknames (#:a #:alexandria) (#:s #:serapeum)))
 
-(in-package #:djeis.ptrees.hamt)
+(in-package #:djeis.ptrees.hamt.impl)
 
 (defstruct hamt
-  root 
+  root
   test
   hash)
 
@@ -182,7 +179,7 @@
   (assert (eq (bt:current-thread) (box-val (thamt-transient-box trie))))
   (funcall (thamt-persistent! trie) trie))
 
-(defun make-ptrie (&optional (test #'equal) (hash #'sxhash))
+(defun make-trie (&optional (test #'equal) (hash #'sxhash))
   (labels ((transient-for (trie)
              (make-thamt :transient-box (make-box :val (bt:current-thread))
                          :root (hamt-root trie)

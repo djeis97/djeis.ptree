@@ -10,5 +10,7 @@
   :in-order-to ((asdf:test-op (asdf:test-op #:djeis.ptrees.test)))
   :pathname "src"
   :serial t
-  :components ((:file "djeis.ptrees.common")
-               (:file "djeis.ptrees.bst")))
+  :components ((:file "package")
+               (:file "djeis.ptrees.common")
+               (:file "djeis.ptrees.bst")
+               (:file "djeis.ptrees.hamt")))
